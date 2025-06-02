@@ -1,9 +1,12 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision import transforms
 from PIL import Image
 import argparse
 import os
+
+# Author: Morteza Farrokhnejad
 
 # Set device (use GPU if available, otherwise CPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -67,23 +70,40 @@ def load_model(model_path, num_classes):
     model.eval()
     return model
 
-# Predict the label for an input image
-def predict_image(model, image_path):
+# Threshold for rejecting impostors (tune this on a validation set)
+THRESHOLD = 0.7
+
+# Predict the label for an input image, with rejection if confidence < THRESHOLD
+def predict_with_reject(model, image_path, threshold=THRESHOLD):
     image = Image.open(image_path)
     image = transform(image).unsqueeze(0).to(device)  # Add batch dimension
+
+    model.eval()
     with torch.no_grad():
-        outputs = model(image)
-        _, predicted = torch.max(outputs, 1)
-        return predicted.item()
+        logits = model(image)                     # shape: [1, num_classes]
+        probs = F.softmax(logits, dim=1)           # shape: [1, num_classes]
+        max_prob, pred_class = torch.max(probs, 1)
+        max_prob = max_prob.item()
+        pred_idx = pred_class.item()
+
+    if max_prob < threshold:
+        return -1, max_prob   # -1 indicates “reject/impostor”
+    else:
+        return pred_idx, max_prob
 
 # Main function with command-line arguments
 def main():
-    # Set up argument parser
-    parser = argparse.ArgumentParser(description="Predict the label of an image using the corresponding model.")
-    parser.add_argument("--dataset", type=str, required=True, choices=["DB_Vein", "FYODB"],
-                        help="Dataset name: 'DB_Vein' or 'FYODB'")
-    parser.add_argument("--image", type=str, required=True,
-                        help="Path to the input image (e.g., image.png)")
+    parser = argparse.ArgumentParser(
+        description="Predict the label of an image using the corresponding model, with impostor rejection."
+    )
+    parser.add_argument(
+        "--dataset", type=str, required=True, choices=["DB_Vein", "FYODB"],
+        help="Dataset name: 'DB_Vein' or 'FYODB'"
+    )
+    parser.add_argument(
+        "--image", type=str, required=True,
+        help="Path to the input image (e.g., image.png)"
+    )
     args = parser.parse_args()
 
     # Define the number of classes for each dataset
@@ -92,10 +112,7 @@ def main():
         "FYODB": 160
     }
 
-    # Get the number of classes based on the dataset
     num_classes = dataset_classes[args.dataset]
-
-    # Construct the model path based on the dataset name
     model_path = f"{args.dataset}_model.pth"
 
     # Check if the model file exists
@@ -106,11 +123,12 @@ def main():
     # Load the model
     model = load_model(model_path, num_classes)
 
-    # Predict the label
-    predicted_label = predict_image(model, args.image)
-    print(f"Predicted Label: {predicted_label + 1}")
+    # Predict the label (or reject as impostor)
+    pred_idx, conf = predict_with_reject(model, args.image)
+    if pred_idx < 0:
+        print(f"Impostor detected (max_prob = {conf:.3f} < {THRESHOLD})")
+    else:
+        print(f"Predicted Label: {pred_idx + 1} (confidence = {conf:.3f})")
 
 if __name__ == "__main__":
     main()
-
-# Author: Morteza Farrokhnejad
