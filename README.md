@@ -15,7 +15,7 @@ This project implements a biometric authentication system using convolutional ne
 ## Datasets
 
 - **DB_Vein**: Contains 13,721 vein images from 98 subjects: https://www.kaggle.com/datasets/michaelgoh/contactless-knuckle-palm-print-and-vein-dataset?resource=download
-- **FYODB**: Contains 640 vein images from 160 subjects: https://fyo.emu.edu.tr/en/download
+- **FYODB**: Contains 640 (+ 6400 augmented) vein images from 160 subjects: https://fyo.emu.edu.tr/en/download
 
 The datasets should be placed in the following directories:
 - `Data/Vein_Dataset/DB_Vein` for DB_Vein
